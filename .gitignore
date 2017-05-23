@@ -2,3 +2,6 @@
 data/
 *~
 ggmapTemp.png
+packrat/lib*/
+cache/
+packrat/src/

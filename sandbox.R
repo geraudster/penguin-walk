@@ -1,7 +1,8 @@
-                                        # Penguin walk I
+#'# Penguin walk I
 
-## Data loading
+#'## Data loading
 
+#+ cache=TRUE
 dir.create('data', recursive = TRUE)
 
 dataUrls <- c('https://s3.amazonaws.com/drivendata/data/47/public/training_set_observations.csv',
@@ -25,27 +26,33 @@ str(nestCount)
 str(trainingSetError)
 str(trainingSetObservations)
 
-## Some plots
+#'## Data preparation
 
-library(plyr)
-library(ggmap)
+trainingSetObservations$month <- factor(trainingSetObservations$month,
+                                        levels = 1:12,
+                                        labels = month.abb)
 
-bbox <- make_bbox(longitude_epsg_4326, latitude_epsg_4326, data = trainingSetObservations)
-map <- get_map(bbox, source = 'osm')
-plot.map <- ggmap(map)
-# map <- map + stat_density2d(aes(x=longitude, y=latitude, fill = ..level.., alpha = ..level.., colour = status_group),
-#                             data = filtered.data,
-#                             size = 0.01, bins = 16, geom = "polygon")
-plot.map <- plot.map + geom_point(aes(x=longitude, y=latitude, color=status_group), data = filtered.data) +
-  scale_color_manual(values=c("green", "orange", "red"), 
-                     name="Status")
+
+#'## Some plots
+#' _adelie penguin_ <div style="width:300px; height=200px">![Image of Adelie Penguin](https://upload.wikimedia.org/wikipedia/commons/2/26/Manchot_Adelie_-_Adelie_Penguin.jpg)</div>
+#' _chinstrap penguin_ <div style="width:300px; height=200px">![Image of Chinstrap Penguin](https://upload.wikimedia.org/wikipedia/commons/6/69/Manchot_01.jpg)</div>
+#' _gentoo penguin_ <div style="width:300px; height=200px">![Image of Gentoo Penguin](https://upload.wikimedia.org/wikipedia/commons/c/c5/Manchot_papou_-_Gentoo_Penguin.jpg)</div>
 
 library(ggplot2)
 world <- map_data("world")
 worldmap <- ggplot(world, aes(x=long, y=lat, group=group)) +
     scale_y_continuous(breaks=c(-90,-75,-60,-45)) +
     scale_x_continuous(breaks=(-2:2) * 45) +
-    coord_map("stereographic", orientation=c(-90, 0, 0), ylim=-60) +
+    coord_map("stereographic", orientation=c(-90, 0, 0), ylim=-50) +
     geom_point(aes(x=longitude_epsg_4326, y=latitude_epsg_4326, color=common_name), inherit.aes = FALSE, data = trainingSetObservations) +
     geom_path()
 
+worldmap
+
+ggplot(trainingSetObservations, aes(x=year, fill=common_name, weight=penguin_count)) +
+    geom_bar() +
+    facet_grid(common_name ~ .)
+
+ggplot(trainingSetObservations, aes(x=month, fill=common_name, weight=penguin_count)) +
+    geom_bar() +
+    facet_grid(common_name ~ .)
