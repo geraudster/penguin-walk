@@ -7,7 +7,7 @@ dir.create('data', recursive = TRUE)
 ```
 
 ```
-## Warning in dir.create("data", recursive = TRUE): 'data' already exists
+## Warning in dir.create("data", recursive = TRUE): 'data' existe déjà
 ```
 
 ```r
@@ -25,16 +25,16 @@ sapply(dataUrls, function (url) {
 
 ```
 ## $`https://s3.amazonaws.com/drivendata/data/47/public/training_set_observations.csv.destfile.size`
-## [1] 328652
+## [1] 331605
 ## 
 ## $`https://s3.amazonaws.com/drivendata/data/47/public/training_set_nest_counts.csv.destfile.size`
-## [1] 60715
+## [1] 61364
 ## 
 ## $`https://s3.amazonaws.com/drivendata/data/47/public/submission_format.csv.destfile.size`
-## [1] 24217
+## [1] 24866
 ## 
 ## $`https://s3.amazonaws.com/drivendata/data/47/public/training_set_e_n.csv.destfile.size`
-## [1] 56627
+## [1] 57276
 ```
 
 ```r
@@ -213,19 +213,33 @@ _gentoo penguin_ <div style="width:300px; height=200px">![Image of Gentoo Pengui
 
 ```r
 library(ggplot2)
+```
+
+```
+## Warning: package 'ggplot2' was built under R version 3.3.3
+```
+
+```r
 world <- map_data("world")
+```
+
+```
+## Warning: package 'maps' was built under R version 3.3.3
+```
+
+```r
 worldmap <- ggplot(world, aes(x=long, y=lat, group=group)) +
     scale_y_continuous(breaks=c(-90,-75,-60,-45)) +
     scale_x_continuous(breaks=(-2:2) * 45) +
-    coord_map("stereographic", orientation=c(-90, 0, 0), ylim=-50) +
-    geom_point(aes(x=longitude_epsg_4326, y=latitude_epsg_4326, color=common_name), inherit.aes = FALSE, data = trainingSetObservations) +
+    coord_map("stereographic", orientation=c(-90, 0, 0), ylim=-60) +
     geom_path()
 
-worldmap
+worldmap + geom_point(aes(x=longitude_epsg_4326, y=latitude_epsg_4326, color=common_name), inherit.aes = FALSE, data = trainingSetObservations)
 ```
 
 ```
-## Warning in is.na(x): is.na() applied to non-(list or vector) of type 'NULL'
+## Warning in is.na(x): is.na() appliqué à un objet de type 'NULL' qui n'est
+## ni une liste, ni un vecteur
 ```
 
 ![plot of chunk unnamed-chunk-3](figure/unnamed-chunk-3-1.png)
@@ -245,4 +259,107 @@ ggplot(trainingSetObservations, aes(x=month, fill=common_name, weight=penguin_co
 ```
 
 ![plot of chunk unnamed-chunk-3](figure/unnamed-chunk-3-3.png)
+
+## Observation sites
+
+
+```r
+library(dplyr)
+```
+
+```
+## Warning: package 'dplyr' was built under R version 3.3.3
+```
+
+```
+## 
+## Attaching package: 'dplyr'
+```
+
+```
+## The following objects are masked from 'package:stats':
+## 
+##     filter, lag
+```
+
+```
+## The following objects are masked from 'package:base':
+## 
+##     intersect, setdiff, setequal, union
+```
+
+```r
+library(magrittr)
+```
+
+```
+## Warning: package 'magrittr' was built under R version 3.3.3
+```
+
+```r
+locations <- trainingSetObservations %>%
+    group_by(site_id, site_name, ccamlr_region, longitude_epsg_4326, latitude_epsg_4326, common_name) %>%
+    summarise(total = sum(penguin_count))
+
+worldmap + geom_point(aes(x=longitude_epsg_4326, y=latitude_epsg_4326, size=total, color=common_name),
+                      inherit.aes = FALSE,
+                      data = locations) +
+    scale_size_continuous(range = c(0.5,10))
+```
+
+```
+## Warning in is.na(x): is.na() appliqué à un objet de type 'NULL' qui n'est
+## ni une liste, ni un vecteur
+```
+
+```
+## Warning: Removed 17 rows containing missing values (geom_point).
+```
+
+![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-1.png)
+
+## Focus on Gentoo penguin
+
+
+```r
+gentooObs <- trainingSetObservations[trainingSetObservations$common_name == 'gentoo penguin',]
+ggplot(gentooObs, aes(x=year, fill=common_name, weight=penguin_count)) +
+    geom_bar()
+```
+
+![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-5-1.png)
+
+```r
+gentooNest <- nestCount[nestCount$common_name == 'gentoo penguin',]
+dim(gentooNest)
+```
+
+```
+## [1] 104  57
+```
+
+```r
+ggplot(gentooObs, aes(x=year, fill=common_name, weight=penguin_count)) +
+    geom_bar()
+```
+
+![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-5-2.png)
+
+```r
+worldmap + geom_point(aes(x=longitude_epsg_4326, y=latitude_epsg_4326, size=total, color=common_name),
+                      inherit.aes = FALSE,
+                      data = locations %>% filter(common_name == 'gentoo penguin')) +
+    scale_size_continuous(range = c(0.5,10))
+```
+
+```
+## Warning in is.na(x): is.na() appliqué à un objet de type 'NULL' qui n'est
+## ni une liste, ni un vecteur
+```
+
+```
+## Warning: Removed 4 rows containing missing values (geom_point).
+```
+
+![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-5-3.png)
 
