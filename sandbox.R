@@ -160,3 +160,62 @@ soi <- c('ACUN',
          'ADAM',
          'AKAR')
 
+#'## Missing data
+library(reshape2)
+nestCountMelt <- melt(nestCount, id.vars=c('site_id', 'common_name'))
+
+(nestCountBySiteAndSpecies <- nestCountMelt  %>%
+    dcast(site_id + variable ~ common_name, sum) %>%
+    group_by(site_id) %>%
+    summarise(`adelie penguin`=sum(`adelie penguin`, na.rm=TRUE),
+              `chinstrap penguin`=sum(`chinstrap penguin`, na.rm=TRUE),
+              `gentoo penguin`=sum(`gentoo penguin`, na.rm=TRUE)) %>%
+    mutate(total = `adelie penguin` + `chinstrap penguin` + `gentoo penguin`))
+
+(nestCountByYear <- nestCountMelt %>%
+    dcast(site_id + variable ~ common_name, sum) %>%
+    group_by(variable) %>%
+    summarise(`adelie penguin`=sum(`adelie penguin`, na.rm=TRUE),
+              `chinstrap penguin`=sum(`chinstrap penguin`, na.rm=TRUE),
+              `gentoo penguin`=sum(`gentoo penguin`, na.rm=TRUE)) %>%
+     mutate(total = `adelie penguin` + `chinstrap penguin` + `gentoo penguin`) %>%
+     melt(id.vars=c('variable'), variable.name='common_name', value.name='countByYear'))
+
+(historicalData <- nestCountMelt %>% inner_join(nestCountByYear, by=c('common_name', 'variable')) %>%
+     group_by(site_id, common_name, variable) %>%
+     summarise(count = sum(value, na.rm=TRUE),
+               countByYear = first(countByYear)) %>%
+    mutate(ratio = count/countByYear) %>%
+    arrange(desc(ratio)) %>%
+    mutate(label=paste0(site_id, common_name)) %>%
+    mutate(year=as.numeric(gsub('X', '', variable))))
+
+(top25SiteBySpecies <- rbind(nestCountBySiteAndSpecies %>% melt(id.vars = 'site_id') %>%
+                            filter(variable == 'adelie penguin') %>%
+                            mutate(common_name='adelie penguin') %>%
+                            arrange(desc(value)) %>%
+                            head(25),
+                            nestCountBySiteAndSpecies %>% melt(id.vars = 'site_id') %>%
+                            filter(variable == 'gentoo penguin') %>%
+                            mutate(common_name='gentoo penguin') %>%
+                            arrange(desc(value)) %>%
+                            head(25),
+                            nestCountBySiteAndSpecies %>% melt(id.vars = 'site_id') %>%
+                            filter(variable == 'chinstrap penguin') %>%
+                            mutate(common_name='chinstrap penguin') %>%
+                            arrange(desc(value)) %>%
+                            head(25)))
+
+top25BySpecies <- historicalData %>%
+    inner_join(top25SiteBySpecies, by=c('site_id', 'common_name'))
+
+ggplot(data=top25BySpecies, aes(x=year, y=site_id)) +
+    geom_tile(aes(fill=ratio)) +
+    facet_grid(common_name ~ ., scales = 'free_y')
+
+sum(is.na(nestCount))
+
+#'# Model
+#'
+
+library(caret)
