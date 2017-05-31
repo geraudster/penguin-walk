@@ -107,12 +107,12 @@ ggplot(gentooObs %>% filter(year >= 1950), aes(x=year, y=penguin_count, color=va
 
 #'## Try to reproduce nest file
 
-trainingSetObservations %>%
-    filter(year >= 2009) %>%
-    filter(! count_type %in% c('chicks', 'adults')) %>%
-    group_by(site_id, common_name, year) %>%
-    summarise(count = max(penguin_count)) %>%
-    filter(site_id == 'BISC')
+library(reshape2)
+(myNestCount <- trainingSetObservations %>%
+     filter(! count_type %in% c('chicks', 'adults')) %>%
+     group_by(site_id, common_name, year) %>%
+     summarise(count = mean(penguin_count, na.rm=TRUE)) %>%
+     dcast(site_id + common_name ~ paste0('X', year))) %>% head
 
 #'## Common functions
 
@@ -162,7 +162,7 @@ soi <- c('ACUN',
 
 #'## Missing data
 library(reshape2)
-nestCountMelt <- melt(nestCount, id.vars=c('site_id', 'common_name'))
+nestCountMelt <- melt(myNestCount, id.vars=c('site_id', 'common_name'))
 
 (nestCountBySiteAndSpecies <- nestCountMelt  %>%
     dcast(site_id + variable ~ common_name, sum) %>%
@@ -213,9 +213,47 @@ ggplot(data=top25BySpecies, aes(x=year, y=site_id)) +
     geom_tile(aes(fill=ratio)) +
     facet_grid(common_name ~ ., scales = 'free_y')
 
-sum(is.na(nestCount))
+sum(is.na(myNestCount))
 
 #'# Model
 #'
 
 library(caret)
+
+dataset <- myNestCount %>%
+    melt(id.var=c('site_id', 'common_name'), variable.name='year') %>%
+    filter(as.character(year) >= 'X1975') %>%
+    mutate(year=factor(gsub('X', '', year), ordered=TRUE),
+           orderKey=paste(site_id, common_name, year)) %>%
+    group_by(orderKey) %>%
+    mutate(prev=lag(value, default=value, order_by=orderKey))
+dataset[is.na(dataset)] <- 0
+
+slices <- createTimeSlices(levels(dataset$year), 7, 4)
+
+yearSplit <- 2010
+trainingSet <- dataset %>% filter(year < yearSplit)
+testingSet <- dataset %>% filter(year >= yearSplit)
+
+model <- train(value ~ ., data=trainingSet, method='glm')
+
+predict2010 <- predict(model, newdata=testingSet)
+
+#'## Timeseries with zoo
+
+library(zoo)
+library(forecast)
+
+dataset <- myNestCount %>%
+    filter(common_name == 'gentoo penguin') %>%
+    filter(site_id == 'LLAN') %>%
+    melt(id.var=c('site_id', 'common_name'), variable.name='year') %>%
+    mutate(year=as.numeric(gsub('X', '', year)))
+
+series <- zoo(dataset$value)
+index(series) <- dataset$year
+
+autoplot(na.approx(series)) + geom_smooth()
+autoplot(forecast(na.approx(series))) 
+autoplot(auto.arima(series))
+
