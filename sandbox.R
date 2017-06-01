@@ -219,6 +219,52 @@ sum(is.na(myNestCount))
 #'
 
 library(caret)
+library(e1071)
+library(ModelMetrics)
+library(parallel)
+dataset <- myNestCount
+dataset[is.na(dataset)] <- 0
+
+cl <- makeCluster(4)
+clusterEvalQ(cl, library('caret'))
+models <- parApply(cl, dataset[,21:55], 1, function(row) {
+    testSetRange <- range(length(row) - 4, length(row))
+    maxTrainSetRange <- length(row) - 5
+    years <- as.numeric(gsub('X', '', names(row)))
+    testSet <- data.frame(year=years[testSetRange], value=row[testSetRange])
+    bestFit <- NA
+    bestLag <- 0
+    bestError <- Inf
+    pb <- txtProgressBar(min=2, max=maxTrainSetRange, style=3)
+    for(i in 2:maxTrainSetRange) {
+        trainSet <- data.frame(year=years[(31-i):30], value=row[(31-i):30])
+        tryCatch({
+            fit <- train(value ~ year,
+                         data=trainSet,
+                         method='lm',
+                         trControl=trainControl(number=1, repeats=1))
+            preds <- predict(fit, testSet)
+            error <- rmse(testSet$value, preds)
+            if(error < bestError) {
+                bestError <- error
+                bestLag <- i
+                bestFit <- fit
+            }
+        }, error = function(e) {
+            print(paste('Cannot train model', i))
+        })
+        setTxtProgressBar(pb, i)
+    }
+    close(pb)
+    trainSet <- rbind(data.frame(year=years[(31-bestLag):30], value=row[(31-bestLag):30]),
+                      testSet)
+    finalFit <- train(value ~ year,
+                      data=trainSet,
+                      method='lm',
+                      trControl=trainControl(number=1, repeats=1))
+
+    list(fit=finalFit, bestLag=bestLag, bestError=bestError)
+})
 
 dataset <- myNestCount %>%
     melt(id.var=c('site_id', 'common_name'), variable.name='year') %>%
@@ -227,7 +273,6 @@ dataset <- myNestCount %>%
            orderKey=paste(site_id, common_name, year)) %>%
     group_by(orderKey) %>%
     mutate(prev=lag(value, default=value, order_by=orderKey))
-dataset[is.na(dataset)] <- 0
 
 slices <- createTimeSlices(levels(dataset$year), 7, 4)
 
