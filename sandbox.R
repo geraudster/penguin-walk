@@ -222,27 +222,35 @@ library(caret)
 library(e1071)
 library(ModelMetrics)
 library(parallel)
+library(foreach)
+library(doParallel)
 dataset <- myNestCount
 dataset[is.na(dataset)] <- 0
 
-cl <- makeCluster(4)
-clusterEvalQ(cl, library('caret'))
-models <- parApply(cl, dataset[,21:55], 1, function(row) {
-    testSetRange <- range(length(row) - 4, length(row))
+registerDoParallel(cores=4)
+
+models <- foreach(idx=1:10,
+                  .packages = c('caret', 'ModelMetrics')) %dopar% {
+##for(idx in 1:10) {                      
+    row <- c(dataset[idx,21:55])
+    testSetRange <- (length(row) - 4):(length(row))
     maxTrainSetRange <- length(row) - 5
     years <- as.numeric(gsub('X', '', names(row)))
-    testSet <- data.frame(year=years[testSetRange], value=row[testSetRange])
+    testSet <- data.frame(year=years[testSetRange], value=unname(unlist(row[testSetRange])))
+    print(years[testSetRange])
+    print(unname(row[testSetRange]))
+    print(testSet)
     bestFit <- NA
     bestLag <- 0
     bestError <- Inf
-    pb <- txtProgressBar(min=2, max=maxTrainSetRange, style=3)
-    for(i in 2:maxTrainSetRange) {
+##    pb <- txtProgressBar(min=2, max=maxTrainSetRange, style=3)
+    partialErrors <- lapply(2:maxTrainSetRange, function(i) {
         trainSet <- data.frame(year=years[(31-i):30], value=row[(31-i):30])
-        tryCatch({
+        possibleError <- tryCatch({
             fit <- train(value ~ year,
                          data=trainSet,
                          method='lm',
-                         trControl=trainControl(number=1, repeats=1))
+                         trControl=trainControl(method='none'))
             preds <- predict(fit, testSet)
             error <- rmse(testSet$value, preds)
             if(error < bestError) {
@@ -250,21 +258,30 @@ models <- parApply(cl, dataset[,21:55], 1, function(row) {
                 bestLag <- i
                 bestFit <- fit
             }
+            list(bestError=bestError, bestLag=bestLag)
         }, error = function(e) {
-            print(paste('Cannot train model', i))
+            e
         })
-        setTxtProgressBar(pb, i)
-    }
-    close(pb)
-    trainSet <- rbind(data.frame(year=years[(31-bestLag):30], value=row[(31-bestLag):30]),
+##        setTxtProgressBar(pb, i)
+        possibleError
+    })
+##    close(pb)
+    trainSet <- rbind(data.frame(year=years[(31-bestLag):30],
+                                 value=unlist(unname(row[(31-bestLag):30]))),
                       testSet)
-    finalFit <- train(value ~ year,
-                      data=trainSet,
-                      method='lm',
-                      trControl=trainControl(number=1, repeats=1))
-
-    list(fit=finalFit, bestLag=bestLag, bestError=bestError)
-})
+    finalFit <- tryCatch({
+        train(value ~ year,
+              data=trainSet,
+              method='lm',
+              trControl=trainControl(method='none'))},
+        error=function (e) e)
+    if(inherits(finalFit, "error")) {
+        print(paste('Cannot train final Model'))
+        list(partialErrors=partialErrors, error=finalFit)
+    } else {
+        list(partialErrors=partialErrors, fit=finalFit, bestLag=bestLag, bestError=bestError)
+    }
+}
 
 dataset <- myNestCount %>%
     melt(id.var=c('site_id', 'common_name'), variable.name='year') %>%
