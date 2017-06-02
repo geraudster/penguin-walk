@@ -229,23 +229,26 @@ dataset[is.na(dataset)] <- 0
 
 registerDoParallel(cores=4)
 
-models <- foreach(idx=1:10,
-                  .packages = c('caret', 'ModelMetrics')) %dopar% {
-##for(idx in 1:10) {                      
+models <- foreach(idx=1:nrow(dataset),                  .packages = c('caret', 'ModelMetrics')) %dopar% {
+    ##for(idx in 1:10) {                      
     row <- c(dataset[idx,21:55])
     testSetRange <- (length(row) - 4):(length(row))
-    maxTrainSetRange <- length(row) - 5
+    maxTrainSetRange <- length(row) - 4
     years <- as.numeric(gsub('X', '', names(row)))
     testSet <- data.frame(year=years[testSetRange], value=unname(unlist(row[testSetRange])))
-    print(years[testSetRange])
-    print(unname(row[testSetRange]))
-    print(testSet)
+##    print(years[testSetRange])
+##    print(unlist(unname(row)))
+##    print(testSet)
     bestFit <- NA
     bestLag <- 0
     bestError <- Inf
 ##    pb <- txtProgressBar(min=2, max=maxTrainSetRange, style=3)
-    partialErrors <- lapply(2:maxTrainSetRange, function(i) {
-        trainSet <- data.frame(year=years[(31-i):30], value=row[(31-i):30])
+    partialErrors <- lapply(2:(maxTrainSetRange-1), function(i) {
+        range <- (maxTrainSetRange-i):maxTrainSetRange
+##        print(range)
+        trainSet <- data.frame(year=years[range],
+                               value=unname(unlist(row[range])))
+##        print(trainSet)
         possibleError <- tryCatch({
             fit <- train(value ~ year,
                          data=trainSet,
@@ -254,9 +257,9 @@ models <- foreach(idx=1:10,
             preds <- predict(fit, testSet)
             error <- rmse(testSet$value, preds)
             if(error < bestError) {
-                bestError <- error
-                bestLag <- i
-                bestFit <- fit
+                bestError <<- error
+                bestLag <<- i
+                bestFit <<- fit
             }
             list(bestError=bestError, bestLag=bestLag)
         }, error = function(e) {
@@ -266,9 +269,13 @@ models <- foreach(idx=1:10,
         possibleError
     })
 ##    close(pb)
-    trainSet <- rbind(data.frame(year=years[(31-bestLag):30],
-                                 value=unlist(unname(row[(31-bestLag):30]))),
+    range <- (maxTrainSetRange-bestLag):maxTrainSetRange
+    print(bestLag)
+##    print(years[range])
+    trainSet <- rbind(data.frame(year=years[range],
+                                 value=unlist(unname(row[range]))),
                       testSet)
+##    str(trainSet)
     finalFit <- tryCatch({
         train(value ~ year,
               data=trainSet,
@@ -277,11 +284,15 @@ models <- foreach(idx=1:10,
         error=function (e) e)
     if(inherits(finalFit, "error")) {
         print(paste('Cannot train final Model'))
-        list(partialErrors=partialErrors, error=finalFit)
+        list(site_id=row$site_id, common_name=row$common_name,
+             partialErrors=partialErrors, error=finalFit)
     } else {
-        list(partialErrors=partialErrors, fit=finalFit, bestLag=bestLag, bestError=bestError)
+        list(site_id=row$site_id, common_name=row$common_name,
+             fit=finalFit, bestLag=bestLag, bestError=bestError)
     }
 }
+
+save(models, 'models.RData')
 
 dataset <- myNestCount %>%
     melt(id.var=c('site_id', 'common_name'), variable.name='year') %>%
