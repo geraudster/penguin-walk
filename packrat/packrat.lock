@@ -140,6 +140,12 @@ Source: CRAN
 Version: 1.6-8
 Hash: 20320ec66d4dc608654769145b7c624a
 
+Package: elasticnet
+Source: CRAN
+Version: 1.1
+Hash: 5f83161aba20fd5d2ca97ab272329cf6
+Requires: lars
+
 Package: evaluate
 Source: CRAN
 Version: 0.10
@@ -222,6 +228,11 @@ Package: labeling
 Source: CRAN
 Version: 0.3
 Hash: ecf589b42cd284b03a4beb9665482d3e
+
+Package: lars
+Source: CRAN
+Version: 1.2
+Hash: 265117078b066c352d6216b5434ec122
 
 Package: lazyeval
 Source: CRAN

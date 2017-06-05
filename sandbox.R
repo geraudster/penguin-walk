@@ -230,6 +230,7 @@ dataset[is.na(dataset)] <- 0
 registerDoParallel(cores=max(1, detectCores()-1))
 
 pb <- txtProgressBar(min = 1, max = nrow(dataset), style = 3)
+method <- 'lasso'
 
 system.time(models <- foreach(idx=1:nrow(dataset), .packages = c('caret', 'ModelMetrics')) %dopar% {
     ##for(idx in 1:10) {
@@ -288,7 +289,7 @@ system.time(models <- foreach(idx=1:nrow(dataset), .packages = c('caret', 'Model
 })
 close(pb)
 
-save(models, file='models.RData')
+save(models, file=paste0('models-', method, '.RData')
 
 library(plyr)
 yearsSubmission <- data.frame(year=2014:2017)
