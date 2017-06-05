@@ -227,28 +227,27 @@ library(doParallel)
 dataset <- myNestCount
 dataset[is.na(dataset)] <- 0
 
-registerDoParallel(cores=4)
+registerDoParallel(cores=max(1, detectCores()-1))
 
-models <- foreach(idx=1:nrow(dataset),                  .packages = c('caret', 'ModelMetrics')) %dopar% {
-    ##for(idx in 1:10) {                      
+pb <- txtProgressBar(min = 1, max = nrow(dataset), style = 3)
+
+system.time(models <- foreach(idx=1:nrow(dataset), .packages = c('caret', 'ModelMetrics')) %dopar% {
+    ##for(idx in 1:10) {
+    setTxtProgressBar(pb, idx)
+    site_id <- dataset[idx, 'site_id']
+    common_name <- dataset[idx, 'common_name']
     row <- c(dataset[idx,21:55])
     testSetRange <- (length(row) - 4):(length(row))
     maxTrainSetRange <- length(row) - 4
     years <- as.numeric(gsub('X', '', names(row)))
     testSet <- data.frame(year=years[testSetRange], value=unname(unlist(row[testSetRange])))
-##    print(years[testSetRange])
-##    print(unlist(unname(row)))
-##    print(testSet)
     bestFit <- NA
     bestLag <- 0
     bestError <- Inf
-##    pb <- txtProgressBar(min=2, max=maxTrainSetRange, style=3)
     partialErrors <- lapply(2:(maxTrainSetRange-1), function(i) {
         range <- (maxTrainSetRange-i):maxTrainSetRange
-##        print(range)
         trainSet <- data.frame(year=years[range],
                                value=unname(unlist(row[range])))
-##        print(trainSet)
         possibleError <- tryCatch({
             fit <- train(value ~ year,
                          data=trainSet,
@@ -265,17 +264,13 @@ models <- foreach(idx=1:nrow(dataset),                  .packages = c('caret', '
         }, error = function(e) {
             e
         })
-##        setTxtProgressBar(pb, i)
         possibleError
     })
-##    close(pb)
     range <- (maxTrainSetRange-bestLag):maxTrainSetRange
-    print(bestLag)
-##    print(years[range])
+#    message(bestLag)
     trainSet <- rbind(data.frame(year=years[range],
                                  value=unlist(unname(row[range]))),
                       testSet)
-##    str(trainSet)
     finalFit <- tryCatch({
         train(value ~ year,
               data=trainSet,
@@ -283,16 +278,34 @@ models <- foreach(idx=1:nrow(dataset),                  .packages = c('caret', '
               trControl=trainControl(method='none'))},
         error=function (e) e)
     if(inherits(finalFit, "error")) {
-        print(paste('Cannot train final Model'))
-        list(site_id=row$site_id, common_name=row$common_name,
+        message(paste('Cannot train final Model'))
+        list(site_id=site_id, common_name=common_name,
              partialErrors=partialErrors, error=finalFit)
     } else {
-        list(site_id=row$site_id, common_name=row$common_name,
+        list(site_id=site_id, common_name=common_name,
              fit=finalFit, bestLag=bestLag, bestError=bestError)
     }
-}
+})
+close(pb)
 
-save(models, 'models.RData')
+save(models, file='models.RData')
+
+library(plyr)
+yearsSubmission <- data.frame(year=2014:2017)
+
+predictions <- ldply(models, function(model) {
+    data.frame(site_id=model$site_id, common_name=model$common_name,
+               year=yearsSubmission,
+               preds=predict(model$fit, yearsSubmission))
+}) %>%
+    mutate(value=pmax(0, round(preds, digits=1))) %>%
+    dcast(site_id + common_name ~ year) %>%
+    right_join(submissionFormat, by=c('site_id', 'common_name')) %>%
+    select(1:6) 
+predictions[is.na(predictions)] <- 0
+
+
+write.csv(predictions, file = 'submission.csv', row.names=FALSE, quote=FALSE)
 
 dataset <- myNestCount %>%
     melt(id.var=c('site_id', 'common_name'), variable.name='year') %>%
@@ -300,7 +313,7 @@ dataset <- myNestCount %>%
     mutate(year=factor(gsub('X', '', year), ordered=TRUE),
            orderKey=paste(site_id, common_name, year)) %>%
     group_by(orderKey) %>%
-    mutate(prev=lag(value, default=value, order_by=orderKey))
+    mutate(prev=lag(value, default=value, order_by=orderKey)) 
 
 slices <- createTimeSlices(levels(dataset$year), 7, 4)
 
