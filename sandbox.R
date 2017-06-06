@@ -217,6 +217,7 @@ sum(is.na(myNestCount))
 
 #'# Model
 #'
+#' One linear model by site/species
 
 library(caret)
 library(e1071)
@@ -224,13 +225,14 @@ library(ModelMetrics)
 library(parallel)
 library(foreach)
 library(doParallel)
+library(elasticnet)
 dataset <- myNestCount
 dataset[is.na(dataset)] <- 0
 
 registerDoParallel(cores=max(1, detectCores()-1))
 
 pb <- txtProgressBar(min = 1, max = nrow(dataset), style = 3)
-method <- 'lasso'
+method <- 'lm'
 
 system.time(models <- foreach(idx=1:nrow(dataset), .packages = c('caret', 'ModelMetrics')) %dopar% {
     ##for(idx in 1:10) {
@@ -252,7 +254,7 @@ system.time(models <- foreach(idx=1:nrow(dataset), .packages = c('caret', 'Model
         possibleError <- tryCatch({
             fit <- train(value ~ year,
                          data=trainSet,
-                         method='lm',
+                         method=method,
                          trControl=trainControl(method='none'))
             preds <- predict(fit, testSet)
             error <- rmse(testSet$value, preds)
@@ -275,7 +277,7 @@ system.time(models <- foreach(idx=1:nrow(dataset), .packages = c('caret', 'Model
     finalFit <- tryCatch({
         train(value ~ year,
               data=trainSet,
-              method='lm',
+              method=method,
               trControl=trainControl(method='none'))},
         error=function (e) e)
     if(inherits(finalFit, "error")) {
@@ -289,8 +291,10 @@ system.time(models <- foreach(idx=1:nrow(dataset), .packages = c('caret', 'Model
 })
 close(pb)
 
-save(models, file=paste0('models-', method, '.RData')
+save(models, file=paste0('models-', method, '.RData'))
 
+#'### Submission
+#' 
 library(plyr)
 yearsSubmission <- data.frame(year=2014:2017)
 
@@ -308,23 +312,8 @@ predictions[is.na(predictions)] <- 0
 
 write.csv(predictions, file = 'submission.csv', row.names=FALSE, quote=FALSE)
 
-dataset <- myNestCount %>%
-    melt(id.var=c('site_id', 'common_name'), variable.name='year') %>%
-    filter(as.character(year) >= 'X1975') %>%
-    mutate(year=factor(gsub('X', '', year), ordered=TRUE),
-           orderKey=paste(site_id, common_name, year)) %>%
-    group_by(orderKey) %>%
-    mutate(prev=lag(value, default=value, order_by=orderKey)) 
 
-slices <- createTimeSlices(levels(dataset$year), 7, 4)
-
-yearSplit <- 2010
-trainingSet <- dataset %>% filter(year < yearSplit)
-testingSet <- dataset %>% filter(year >= yearSplit)
-
-model <- train(value ~ ., data=trainingSet, method='glm')
-
-predict2010 <- predict(model, newdata=testingSet)
+#'## Second model with lag
 
 #'## Timeseries with zoo
 
