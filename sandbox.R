@@ -293,6 +293,12 @@ close(pb)
 
 save(models, file=paste0('models-', method, '.RData'))
 
+ldply(models, function(model) data.frame(model$bestLag, model$bestError)) %>%
+    ggplot(aes(x=model.bestLag)) + geom_bar()
+
+ldply(models, function(model) data.frame(model$bestLag, model$bestError)) %>%
+    ggplot(aes(x=model.bestError)) + geom_histogram()
+
 #'### Submission
 #' 
 library(plyr)
@@ -314,6 +320,9 @@ write.csv(predictions, file = 'submission.csv', row.names=FALSE, quote=FALSE)
 
 
 #'## Second model with lag
+selectedLag <- median(sapply(models, function(model) model$bestLag))
+
+dataset %>% inner_join(locations) %>% head
 
 #'## Timeseries with zoo
 
