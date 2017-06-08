@@ -74,9 +74,41 @@ testset <- dataWithLag %>% filter(year >= 2010)
 dim(trainset)
 dim(testset)
 
+method <- 'rf'
 model <- train(current ~ . - site_id,
                preProcess=c('center', 'scale'),
                data=trainset, method='rf')
 
+
+save(model, file=paste0('model-', method, '.RData'))
+
+
 predictions <- predict(model, newdata=testset)
 rmse(testset$current, predictions)
+
+uniqueLocations <- trainingSetObservations %>%
+    distinct(site_id, ccamlr_region)
+
+(dataForPreds2014 <-
+    dataset %>%
+    right_join(submissionFormat, by=c('site_id', 'common_name')) %>%
+    right_join(uniqueLocations, by=c('site_id')) %>%
+    select(-X2014.x) %>%
+    rename(X2014=X2014.y) %>%
+    dim
+    
+    melt(id.vars=c('common_name', 'site_id'), variable.name='year', value.name='current') %>%
+    mutate(year=as.numeric(gsub('X', '', year))) %>%
+    group_by(common_name, site_id) %>%
+    Reduce(function (acc, x) {
+        acc[[paste0('current.', x)]] <- with(acc, lag(current, default=0, order_by=year))
+        acc
+    }, 1:10, .) %>% 
+    inner_join(locations) %>%
+    select(-site_id, -site_name, -longitude_epsg_4326, -latitude_epsg_4326) %>%
+    filter(year==2014) %>%
+    predict(model, newdata=.) 
+)
+
+
+dim(submissionFormat)

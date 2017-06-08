@@ -322,7 +322,13 @@ write.csv(predictions, file = 'submission.csv', row.names=FALSE, quote=FALSE)
 #'## Second model with lag
 selectedLag <- median(sapply(models, function(model) model$bestLag))
 
-dataset %>% inner_join(locations) %>% head
+cols <- c('common_name', 'ccamlr_region', paste0('X', 1980:2014))
+
+dataset %>% 
+    inner_join(locations) %>%
+    select(one_of(cols)) %>%
+    
+
 
 #'## Timeseries with zoo
 
